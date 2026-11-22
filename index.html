@@ -65,7 +65,7 @@ button:disabled{opacity:.4;cursor:default}
 </head>
 <body>
 <div class="app">
-<header><div><h1>FILM FRAME STUDIO</h1><small>Analog film layouts for your photographs</small></div><small>v2.0</small></header>
+<header><div><h1>FILM FRAME STUDIO</h1><small>Analog film layouts for your photographs</small></div><small>v2.1</small></header>
 <main class="layout">
   <section class="stage">
     <div class="preview"><canvas id="canvas" width="1080" height="1920" aria-label="Film layout preview"></canvas></div>
@@ -81,6 +81,8 @@ button:disabled{opacity:.4;cursor:default}
       <div class="templates" id="templates"></div>
       <div id="formatRow" hidden><h3>Film format</h3><div class="toggle" id="format">
         <button data-format="35">35mm</button><button data-format="120">120 medium format</button></div></div>
+      <div id="sizeRow" hidden><h3>120 frame size</h3><div class="toggle" id="size120">
+        <button data-size="645">6×4.5</button><button data-size="66">6×6</button><button data-size="67">6×7</button></div></div>
       <div id="orientRow" hidden><h3>Orientation</h3><div class="toggle" id="orient">
         <button data-orient="portrait">Portrait</button><button data-orient="landscape">Landscape</button></div></div>
     </div>
@@ -149,7 +151,7 @@ const $$ = s => Array.from(document.querySelectorAll(s));
 const TEMPLATES = [
   {id: 'triple',   label: '3-frame strip',   count: 3, format: true},
   {id: 'double',   label: '2-frame strip',   count: 2, format: true},
-  {id: 'single',   label: 'Single negative', count: 1, orient: true},
+  {id: 'single',   label: 'Single negative', count: 1, format: true, orient: true},
   {id: 'slide',    label: 'Slide mount',     count: 1, orient: true},
   {id: 'polaroid', label: 'Polaroid',        count: 1},
 ];
@@ -166,7 +168,8 @@ const DEFAULT_TEXT = {film: '400 SAFETY FILM', slide: 'COLOR TRANSPARENCY'};
 
 const state = {
   template: 'triple',
-  format: '35',            // strips: '35' | '120'
+  format: '35',            // strips + single: '35' | '120'
+  size120: null,           // '645' | '66' | '67' (null = template default)
   orient: 'portrait',      // single + slide
   finish: 'black',
   customColor: null,       // overrides finish base when set
@@ -248,11 +251,22 @@ function grainPattern(vertical) {
    Slide mount: 50×50mm, window 34×23mm.
    Polaroid 600 / i-Type: 88×107mm, image 79×79mm.
    ========================================================================== */
+
+// Film is cut by hand with scissors: ends are never perfectly square.
+function handCut(p, seed) {
+  const r = rng(seed), j = () => .08 + r() * .38;
+  p.outline = [[0, j()], [p.w, j()], [p.w, p.h - j()], [0, p.h - j()]];
+  return p;
+}
+function size120() {
+  return state.size120 || (state.template === 'triple' ? '645' : '66');
+}
 function piece35(n) {
   const w = 35, pitch = 38, iw = 24, ih = 36, end = 2;
   const h = end * 2 + (n - 1) * pitch + ih;
   const p = {w, h, kind: 'film', corner: .25, windows: [], holes: [], texts: [], bars: [], tris: [], grainVertical: true};
   for (let i = 0; i < n; i++) p.windows.push({x: (w - iw) / 2, y: end + i * pitch, w: iw, h: ih, r: .3});
+  handCut(p, 50 + n);
   // Perforations run continuously along both edges, 8 per frame.
   const pw = 1.98, ph = 2.79, pp = 4.75;
   for (let y = end - 1 + (pp - ph) / 2; y + ph <= h - .4; y += pp) {
@@ -279,15 +293,28 @@ function mark35(p, start) {
     }
   }
 }
-function piece120(n, fmt) {
-  const w = 61.5, iw = 56, ih = fmt === '66' ? 56 : 41.5, gap = fmt === '66' ? 4 : 4, end = 2.5;
-  const h = end * 2 + n * ih + (n - 1) * gap;
+// 120 roll film: 61.5mm wide; image is 56mm across, and 41.5 / 56 / 69.5mm along the film.
+// Medium-format backs advance by roller, so spacing between frames varies a little.
+function piece120(n, size) {
+  const w = 61.5, iw = 56, ih = {645: 41.5, 66: 56, 67: 69.5}[size] || 56, end = n === 1 ? 3.6 : 2.6;
+  const r = rng(90 + n * 7 + ih);
+  const gaps = Array.from({length: Math.max(0, n - 1)}, () => 3.4 + r() * 1.4);
+  const h = end * 2 + n * ih + gaps.reduce((a, b) => a + b, 0);
   const p = {w, h, kind: 'film', corner: .3, windows: [], holes: [], texts: [], bars: [], tris: [], grainVertical: true};
-  for (let i = 0; i < n; i++) p.windows.push({x: (w - iw) / 2, y: end + i * (ih + gap), w: iw, h: ih, r: .6});
-  return p;
+  let y = end;
+  for (let i = 0; i < n; i++) {
+    const dx = (r() - .5) * .5; // slight lateral wander of the frame on the film
+    p.windows.push({x: (w - iw) / 2 + dx, y, w: iw, h: ih, r: .7});
+    y += ih + (gaps[i] || 0);
+  }
+  return handCut(p, 70 + n);
 }
 function mark120(p) {
-  p.windows.forEach(win => p.texts.push({x: 1.38, y: win.y + win.h / 2, a: 90, s: 1.45, t: 'EDGE', role: 'ink'}));
+  p.windows.forEach(win => {
+    p.texts.push({x: 1.38, y: win.y + win.h / 2, a: 90, s: 1.45, t: 'EDGE', role: 'ink'});
+    // Small square index marks printed along the opposite edge.
+    for (let y = win.y + 4; y < win.y + win.h - 2; y += 12) p.bars.push({x: 59.95, y, w: .7, h: .7});
+  });
 }
 function pieceSlide() {
   const p = {w: 50, h: 50, kind: 'mount', corner: 2.2, windows: [{x: 8, y: 13.5, w: 34, h: 23, r: .9}],
@@ -310,6 +337,7 @@ function rotatePiece(p) {
   const P = o => Object.assign({}, o, {x: o.y, y: Wp - o.x, a: (o.a || 0) - 90});
   return Object.assign({}, p, {
     w: p.h, h: p.w, grainVertical: !p.grainVertical,
+    outline: p.outline && p.outline.map(([x, y]) => [y, Wp - x]),
     windows: p.windows.map(R), holes: p.holes.map(R), bars: p.bars.map(R),
     texts: p.texts.map(P), tris: p.tris.map(P), dots: (p.dots || []).map(P),
   });
@@ -321,10 +349,11 @@ function buildPiece() {
   let p;
   if (t === 'triple' || t === 'double') {
     const n = t === 'triple' ? 3 : 2;
-    if (state.format === '120') { p = piece120(n, n === 3 ? '645' : '66'); if (marks) mark120(p); }
+    if (state.format === '120') { p = piece120(n, size120()); if (marks) mark120(p); }
     else { p = piece35(n); if (marks) mark35(p, start); }
   } else if (t === 'single') {
-    p = piece35(1); if (marks) mark35(p, start);
+    if (state.format === '120') { p = piece120(1, size120()); if (marks) mark120(p); }
+    else { p = piece35(1); if (marks) mark35(p, start); }
     if (state.orient === 'landscape') p = rotatePiece(p);
   } else if (t === 'slide') {
     p = pieceSlide(); if (marks) markSlide(p, start);
@@ -345,6 +374,7 @@ function computeGeometry() {
   const R = o => ({x: ox + o.x * k, y: oy + o.y * k, w: o.w * k, h: o.h * k, r: (o.r || 0) * k});
   return {
     piece: p, k, x: ox, y: oy, w: pw, h: ph,
+    outline: p.outline && p.outline.map(([x, y]) => [ox + x * k, oy + y * k]),
     windows: p.windows.map((o, i) => Object.assign(R(o), {i})),
     holes: p.holes.map(R), bars: p.bars.map(R),
     texts: p.texts.map(o => Object.assign({}, o, {x: ox + o.x * k, y: oy + o.y * k, s: o.s * k})),
@@ -388,7 +418,8 @@ function windowPath(c, b) {
 function piecePath(g) {
   const path = new Path2D();
   const r = g.piece.corner * g.k;
-  if (path.roundRect) path.roundRect(g.x, g.y, g.w, g.h, r); else path.rect(g.x, g.y, g.w, g.h);
+  if (g.outline) { g.outline.forEach(([x, y], i) => i ? path.lineTo(x, y) : path.moveTo(x, y)); path.closePath(); }
+  else if (path.roundRect) path.roundRect(g.x, g.y, g.w, g.h, r); else path.rect(g.x, g.y, g.w, g.h);
   g.holes.forEach(h => { if (path.roundRect) path.roundRect(h.x, h.y, h.w, h.h, h.r); else path.rect(h.x, h.y, h.w, h.h); });
   return path;
 }
@@ -417,10 +448,14 @@ function drawBackground(c) {
 
 function drawMaterial(c, g, fin) {
   const path = piecePath(g), k = g.k;
-  // Base with a soft contact shadow; holes are true cut-outs.
+  const film = g.piece.kind === 'film';
+  // Two-layer shadow: a broad ambient one plus a tight contact shadow,
+  // so the piece reads as lying slightly lifted on the surface. Holes are true cut-outs.
   c.save();
-  c.shadowColor = 'rgba(0,0,0,.30)'; c.shadowBlur = k * (g.piece.kind === 'film' ? 1.6 : 2.4); c.shadowOffsetY = k * .5;
+  c.shadowColor = 'rgba(0,0,0,.16)'; c.shadowBlur = k * (film ? 4 : 6); c.shadowOffsetY = k * (film ? 1.2 : 1.8);
   c.fillStyle = fin.base; c.fill(path, 'evenodd');
+  c.shadowColor = 'rgba(0,0,0,.32)'; c.shadowBlur = k * (film ? .7 : 1.1); c.shadowOffsetY = k * .22;
+  c.fill(path, 'evenodd');
   c.restore();
 
   c.save(); c.clip(path, 'evenodd');
@@ -436,6 +471,40 @@ function drawMaterial(c, g, fin) {
   if (luminance(fin.base) > 150) {
     c.save(); c.strokeStyle = 'rgba(0,0,0,.14)'; c.lineWidth = Math.max(1, k * .08); c.stroke(path); c.restore();
   }
+
+  // Perforations: the film's own thickness shades the surface seen through each hole,
+  // and the punched edge catches a little light.
+  g.holes.forEach(h => {
+    c.save(); windowPath(c, h); c.clip();
+    const sg = c.createLinearGradient(0, h.y, 0, h.y + h.h);
+    sg.addColorStop(0, 'rgba(0,0,0,.30)'); sg.addColorStop(.45, 'rgba(0,0,0,.06)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = sg; c.fillRect(h.x, h.y, h.w, h.h);
+    c.restore();
+    c.save(); c.lineWidth = Math.max(1, k * .1);
+    c.strokeStyle = luminance(fin.base) < 90 ? 'rgba(255,255,255,.13)' : 'rgba(0,0,0,.18)';
+    windowPath(c, h); c.stroke(); c.restore();
+  });
+}
+
+// Sits over the whole strip, photos included, so base and image read as one sheet of plastic:
+// a slight curl across the width (film cups toward the emulsion) and a faint specular sheen.
+function drawFilmSurface(c, g) {
+  if (g.piece.kind !== 'film') return;
+  const path = piecePath(g);
+  c.save(); c.clip(path, 'evenodd');
+  const across = g.piece.grainVertical
+    ? c.createLinearGradient(g.x, 0, g.x + g.w, 0)
+    : c.createLinearGradient(0, g.y, 0, g.y + g.h);
+  across.addColorStop(0, 'rgba(0,0,0,.13)'); across.addColorStop(.1, 'rgba(0,0,0,0)');
+  across.addColorStop(.5, 'rgba(255,255,255,.025)');
+  across.addColorStop(.9, 'rgba(0,0,0,0)'); across.addColorStop(1, 'rgba(0,0,0,.13)');
+  c.fillStyle = across; c.fillRect(g.x, g.y, g.w, g.h);
+  const sheen = c.createLinearGradient(g.x, g.y, g.x + g.w * 1.1, g.y + g.h * .55);
+  sheen.addColorStop(0, 'rgba(255,255,255,0)'); sheen.addColorStop(.36, 'rgba(255,255,255,0)');
+  sheen.addColorStop(.47, 'rgba(255,255,255,.06)'); sheen.addColorStop(.52, 'rgba(255,255,255,.025)');
+  sheen.addColorStop(.62, 'rgba(255,255,255,0)'); sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = sheen; c.fillRect(g.x, g.y, g.w, g.h);
+  c.restore();
 }
 
 function drawPhoto(c, i, box, exporting) {
@@ -471,6 +540,13 @@ function drawWindowEdges(c, g, fin) {
       c.save(); c.strokeStyle = luminance(fin.base) > 120 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.08)';
       c.lineWidth = Math.max(1, k * .12);
       const o = k * .9; windowPath(c, {x: b.x - o, y: b.y - o, w: b.w + 2 * o, h: b.h + 2 * o, r: b.r + o}); c.stroke(); c.restore();
+    } else if (kind === 'film') {
+      // The camera gate's edge is never razor sharp on film: a slightly soft,
+      // darkened boundary where the image meets the base.
+      c.save(); windowPath(c, b); c.clip();
+      c.shadowColor = 'rgba(0,0,0,.55)'; c.shadowBlur = k * .35;
+      c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = k * .18; windowPath(c, b); c.stroke();
+      c.restore();
     } else if (kind === 'polaroid') {
       c.save(); windowPath(c, b); c.clip();
       c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = k * .6;
@@ -495,6 +571,8 @@ function drawMarkings(c, g, fin) {
     const color = t.role === 'print' ? fin.print : fin.ink;
     c.save(); c.translate(t.x, t.y); c.rotate(t.a * Math.PI / 180);
     c.fillStyle = color; c.globalAlpha = .9;
+    // Edge print is a latent image exposed through the base: soft, with a slight bloom.
+    if (kind === 'film') { c.shadowColor = color; c.shadowBlur = t.s * .3; c.globalAlpha = .85; }
     c.font = edgeFont(t.s, t.font === 'mount' ? 'mount' : 'film');
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText(t.t === 'EDGE' ? edge : t.t, 0, 0);
@@ -549,6 +627,7 @@ function renderTo(c, exporting) {
   g.windows.forEach(b => drawPhoto(c, b.i, b, exporting));
   drawWindowEdges(c, g, fin);
   drawMarkings(c, g, fin);
+  drawFilmSurface(c, g);
   drawCaption(c, g);
   if (!exporting) drawSelection(c, g);
   return g;
@@ -569,7 +648,9 @@ function refreshPanel() {
   $('#templates').innerHTML = TEMPLATES.map(t => `<button data-t="${t.id}" class="${t.id === state.template ? 'selected' : ''}">${t.label}</button>`).join('');
   $('#photos').innerHTML = Array.from({length: info.count}, (_, i) => `<label class="upload ${i === state.selected ? 'active' : ''}" data-i="${i}"><b>Frame ${i + 1}</b><span>${state.photos[i] ? 'Replace photo' : 'Choose photo'}</span><input type="file" accept="image/*" data-i="${i}"></label>`).join('');
   $('#formatRow').hidden = !info.format;
-  $('#orientRow').hidden = !info.orient;
+  $('#orientRow').hidden = !info.orient || (state.format === '120' && size120() === '66');
+  $('#sizeRow').hidden = !(info.format && state.format === '120');
+  $$('#size120 button').forEach(b => b.classList.toggle('selected', b.dataset.size === size120()));
   $$('#format button').forEach(b => b.classList.toggle('selected', b.dataset.format === state.format));
   $$('#orient button').forEach(b => b.classList.toggle('selected', b.dataset.orient === state.orient));
   $$('#mode button').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
@@ -607,7 +688,10 @@ $('#finishes').innerHTML = Object.entries(FINISHES).map(([id, f]) =>
 
 $('#templates').addEventListener('click', e => {
   const b = e.target.closest('button[data-t]'); if (!b) return;
-  state.template = b.dataset.t; state.selected = 0; refreshPanel();
+  state.template = b.dataset.t; state.selected = 0; state.size120 = null; refreshPanel();
+});
+$('#size120').addEventListener('click', e => {
+  const b = e.target.closest('button[data-size]'); if (!b) return; state.size120 = b.dataset.size; refreshPanel();
 });
 $('#format').addEventListener('click', e => {
   const b = e.target.closest('button[data-format]'); if (!b) return; state.format = b.dataset.format; refreshPanel();
@@ -882,7 +966,7 @@ $('#export').onclick = async () => {
 };
 
 $('#reset').onclick = () => {
-  Object.assign(state, {template: 'triple', format: '35', orient: 'portrait', finish: 'black', customColor: null, selected: 0, mode: 'photo',
+  Object.assign(state, {template: 'triple', format: '35', size120: null, orient: 'portrait', finish: 'black', customColor: null, selected: 0, mode: 'photo',
     photos: [null, null, null], layout: {scale: 1, dx: 0, dy: 0}, background: null, backgroundMode: 'solid'});
   $('#scale').value = 100; $('#scaleOut').textContent = '100%';
   $('#bgColor').value = '#b9b8af'; $('#bgBlur').value = 5; $('#filmColor').value = FINISHES.black.base;
