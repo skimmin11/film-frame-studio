@@ -1,14 +1,902 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#f3f1eb"><title>Film Frame Studio</title><style>
-:root{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;color:#1c1c1c;background:#f3f1eb}*{box-sizing:border-box}body{margin:0}header{padding:19px 18px 11px;display:flex;align-items:center;justify-content:space-between}h1{font-size:21px;letter-spacing:-.7px;margin:0}small{color:#777}.app{max-width:1040px;margin:auto}.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,360px);gap:20px;padding:0 16px 24px}.preview{display:flex;align-items:center;justify-content:center;background:#dedbd4;border-radius:18px;padding:14px;min-height:400px}.preview canvas{display:block;width:auto;height:auto;max-width:100%;max-height:67vh;aspect-ratio:9/16;box-shadow:0 10px 35px #0002;touch-action:none;background:#ddd}.panel{background:#fff;border-radius:18px;padding:17px;align-self:start}.group{border-bottom:1px solid #eee;padding-bottom:15px;margin-bottom:15px}.group:last-child{border:0;margin:0;padding:0}h2{font-size:12px;text-transform:uppercase;letter-spacing:1.3px;color:#777;margin:0 0 11px}.templates{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}button,.upload{font:inherit;border:1px solid #d7d7d7;background:#fff;color:#242424;border-radius:10px;padding:10px 7px;cursor:pointer;text-align:center;font-size:12px}button.selected{border-color:#222;background:#222;color:white}.row{display:flex;gap:8px;align-items:center;margin:10px 0}.row label{font-size:13px;flex:1}.row input[type=range]{flex:2;min-width:0}.row input[type=color]{height:34px;width:49px;border:0;background:none}.photoGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.photoGrid .upload{min-height:54px;display:flex;justify-content:center;align-items:center;flex-direction:column;gap:3px}.upload input{display:none}.upload b{font-size:13px}.upload span{font-size:10px;color:#777}.upload.active{border:2px solid #222;background:#f4f2ec}.actions{display:flex;gap:8px}.primary{background:#1b1b1b;color:white;flex:1;font-weight:600;padding:13px}.secondary{flex:1}.hint{font-size:12px;color:#777;line-height:1.5;margin:9px 0 0}.toggle{display:flex;gap:6px}.toggle button{flex:1}.status{font-size:12px;color:#777;margin-top:8px;min-height:16px}@media(max-width:720px){.layout{display:flex;flex-direction:column;gap:12px;padding:0 12px 24px}.preview{padding:12px;min-height:0}.preview canvas{max-height:54vh}.panel{width:100%}header{padding:15px 15px 11px}}
-</style></head><body><div class="app"><header><div><h1>FILM FRAME STUDIO</h1><small>Simple film layouts for your photographs</small></div><small>v1.1</small></header><main class="layout"><section class="preview"><canvas id="canvas" width="1080" height="1920" aria-label="Film layout preview"></canvas></section><section class="panel"><div class="group"><h2>Film template</h2><div class="templates" id="templates"></div></div><div class="group"><h2>Photographs</h2><div class="photoGrid" id="photos"></div><p class="hint">Tap a frame to select it. Use zoom (50–500%) and position sliders, or drag the photograph in the preview.</p></div><div class="group"><h2>Background</h2><div class="toggle"><button id="solid" class="selected">Solid color</button><label class="upload" style="flex:1">Upload photo<input type="file" id="bgFile" accept="image/*"></label></div><div class="row"><label for="bgColor">Background color</label><input id="bgColor" type="color" value="#b9b8af"></div><div class="row"><label for="bgBlur">Background blur</label><input id="bgBlur" type="range" min="0" max="35" value="5"></div></div><div class="group"><h2>Layout controls</h2><div class="row"><label for="scale">Film size</label><input id="scale" type="range" min="55" max="110" value="84"></div><div class="row"><label for="zoom">Selected photo zoom</label><input id="zoom" type="range" min="50" max="500" value="100"></div><h2>Film stock color</h2><div class="toggle" id="stocks"><button data-color="#f6f3ec" class="selected">Ivory</button><button data-color="#171716">Black</button><button data-color="#76533b">Walnut</button></div><div class="row"><label for="filmColor">Custom border</label><input id="filmColor" type="color" value="#f6f3ec"></div><div class="row"><label for="panX">Photo horizontal position</label><input id="panX" type="range" min="-500" max="500" value="0"></div><div class="row"><label for="panY">Photo vertical position</label><input id="panY" type="range" min="-650" max="650" value="0"></div><div class="row"><label for="markings">Film markings</label><input id="markings" type="checkbox" checked></div><div class="row"><label for="fit">Photo fit</label><select id="fit"><option value="contain">Show whole photo</option><option value="cover">Fill frame</option></select></div></div><div class="group"><h2>Export</h2><div class="actions"><button class="primary" id="export">Save 1080 × 1920 PNG</button><button class="secondary" id="reset">Reset</button></div><p class="hint">Exports a clean image without app controls. On iPhone, save the image to Photos from Safari's share menu if it opens in a new tab.</p><div id="status" class="status"></div></div></section></main></div><script>
-(()=>{'use strict';const W=1080,H=1920,c=document.querySelector('#canvas'),ctx=c.getContext('2d');const $=s=>document.querySelector(s);const presets=[['triple','3-frame strip',3],['double','2-frame strip',2],['single','Single negative',1],['slide','Slide mount',1],['polaroid','Polaroid',1]];let type='triple',selected=0,images=[null,null,null],offsets=[{x:0,y:0},{x:0,y:0},{x:0,y:0}],zooms=[1,1,1],background=null,backgroundMode='solid',boxes=[],drag=null;const els={scale:$('#scale'),zoom:$('#zoom'),filmColor:$('#filmColor'),markings:$('#markings'),fit:$('#fit'),bgColor:$('#bgColor'),bgBlur:$('#bgBlur'),panX:$('#panX'),panY:$('#panY')};
-function rounded(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}function rect(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h)}function photo(img,x,y,w,h,index,mode){ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();if(!img){let g=ctx.createLinearGradient(x,y,x+w,y+h);g.addColorStop(0,'#a5b6b8');g.addColorStop(.6,'#728b85');g.addColorStop(1,'#d0b6a1');ctx.fillStyle=g;ctx.fillRect(x,y,w,h);ctx.fillStyle='#ffffff77';ctx.beginPath();ctx.arc(x+w*.7,y+h*.3,w*.13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#5b726b';ctx.beginPath();ctx.moveTo(x,y+h);ctx.lineTo(x+w*.35,y+h*.5);ctx.lineTo(x+w*.58,y+h*.78);ctx.lineTo(x+w*.79,y+h*.43);ctx.lineTo(x+w,y+h*.76);ctx.lineTo(x+w,y+h);ctx.fill();}else{const cover=Math.max(w/img.width,h/img.height),contain=Math.min(w/img.width,h/img.height),base=mode==='contain'?contain:cover,scale=base*zooms[index],iw=img.width*scale,ih=img.height*scale;ctx.fillStyle='#272727';ctx.fillRect(x,y,w,h);ctx.drawImage(img,x+(w-iw)/2+offsets[index].x,y+(h-ih)/2+offsets[index].y,iw,ih);}ctx.restore()}
-function inkFor(hex){let a=hex.replace('#','');let r=parseInt(a.slice(0,2),16),g=parseInt(a.slice(2,4),16),b=parseInt(a.slice(4,6),16);return .2126*r+.7152*g+.0722*b<130?'#e4c89c':'#403b33'}
-function sprockets(x,y,w,h){const ink=inkFor(els.filmColor.value);ctx.fillStyle=ink;let step=57,sz=24;for(let yy=y+24;yy<y+h-20;yy+=step){rounded(x+14,yy,sz,34,5);ctx.fill();rounded(x+w-38,yy,sz,34,5);ctx.fill()}}
-function markings(x,y,w,h,count){if(!els.markings.checked)return;const ink=inkFor(els.filmColor.value);ctx.fillStyle=ink;ctx.font='bold 18px monospace';ctx.textAlign='center';ctx.save();ctx.translate(x+57,y+h/2);ctx.rotate(-Math.PI/2);ctx.fillText('400  •  35MM  •  '+String(count+1).padStart(2,'0')+'A',0,0);ctx.restore();ctx.save();ctx.translate(x+w-57,y+h/2);ctx.rotate(Math.PI/2);ctx.fillText('FRAME  '+String(count+1).padStart(2,'0')+'  ◀  400',0,0);ctx.restore()}
-function render(){ctx.clearRect(0,0,W,H);rect(0,0,W,H,els.bgColor.value);if(background&&backgroundMode==='photo'){ctx.save();ctx.filter=`blur(${Number(els.bgBlur.value)*2}px)`;let s=Math.max((W+150)/background.width,(H+150)/background.height);ctx.drawImage(background,(W-background.width*s)/2,(H-background.height*s)/2,background.width*s,background.height*s);ctx.restore();rect(0,0,W,H,'#00000018')}const s=Number(els.scale.value)/100,fc=els.filmColor.value;boxes=[];if(type==='triple'||type==='double'){const n=type==='triple'?3:2;let width=870*s,frameH=type==='triple'?490*s:690*s,margin=type==='triple'?60*s:68*s,gap=26*s,outerH=n*frameH+(n-1)*gap+2*margin;let maxH=H*.88;if(outerH>maxH){let ratio=maxH/outerH;width*=ratio;frameH*=ratio;margin*=ratio;gap*=ratio;outerH=maxH}const x=(W-width)/2,y=(H-outerH)/2;ctx.shadowColor='#00000036';ctx.shadowBlur=35;ctx.shadowOffsetY=14;rect(x,y,width,outerH,fc);ctx.shadowColor='transparent';ctx.shadowBlur=0;if(els.markings.checked)sprockets(x,y,width,outerH);for(let i=0;i<n;i++){let px=x+width*.13,py=y+margin+i*(frameH+gap),pw=width*.74;photo(images[i],px,py,pw,frameH,i,els.fit.value);boxes.push({x:px,y:py,w:pw,h:frameH,i});markings(x,py,width,frameH,i)}}else if(type==='single'){let w=890*s,h=1110*s,x=(W-w)/2,y=(H-h)/2;ctx.shadowColor='#0004';ctx.shadowBlur=32;rect(x,y,w,h,fc);ctx.shadowColor='transparent';if(els.markings.checked)sprockets(x,y,w,h);photo(images[0],x+64*s,y+95*s,w-128*s,h-190*s,0,els.fit.value);boxes.push({x:x+64*s,y:y+95*s,w:w-128*s,h:h-190*s,i:0});ctx.fillStyle=inkFor(fc);ctx.font=`${22*s}px monospace`;ctx.fillText('KODAK 400  •  01A',x+80*s,y+49*s);ctx.fillText('02 ◀',x+w-130*s,y+h-35*s)}else if(type==='slide'){let w=900*s,h=1000*s,x=(W-w)/2,y=(H-h)/2;ctx.shadowColor='#0003';ctx.shadowBlur=30;rect(x,y,w,h,fc);ctx.shadowColor='transparent';let px=x+80*s,py=y+105*s,pw=w-160*s,ph=h-260*s;photo(images[0],px,py,pw,ph,0,els.fit.value);boxes.push({x:px,y:py,w:pw,h:ph,i:0});ctx.fillStyle='#555';ctx.font=`${26*s}px monospace`;ctx.textAlign='center';ctx.fillText('COLOR TRANSPARENCY  •  01',W/2,y+h-68*s)}else{let w=870*s,h=1130*s,x=(W-w)/2,y=(H-h)/2;ctx.shadowColor='#0003';ctx.shadowBlur=30;rect(x,y,w,h,fc);ctx.shadowColor='transparent';let px=x+55*s,py=y+55*s,pw=w-110*s,ph=h-290*s;photo(images[0],px,py,pw,ph,0,els.fit.value);boxes.push({x:px,y:py,w:pw,h:ph,i:0});ctx.fillStyle='#555';ctx.font=`italic ${33*s}px Georgia`;ctx.textAlign='center';ctx.fillText('a moment on film',W/2,y+h-110*s)}if(!window.__exporting && boxes[selected]){const b=boxes[selected];ctx.strokeStyle='#ffffffbb';ctx.lineWidth=3;ctx.strokeRect(b.x+2,b.y+2,b.w-4,b.h-4)}}
-function refresh(){const n=presets.find(p=>p[0]===type)[2];$('#templates').innerHTML=presets.map(p=>`<button data-t="${p[0]}" class="${p[0]===type?'selected':''}">${p[1]}</button>`).join('');$('#photos').innerHTML=Array.from({length:n},(_,i)=>`<label class="upload ${i===selected?'active':''}"><b>Frame ${i+1}</b><span>${images[i]?'Replace photo':'Choose photo'}</span><input type="file" accept="image/*" data-i="${i}"></label>`).join('');els.zoom.value=Math.round(zooms[selected]*100);els.panX.value=offsets[selected].x;els.panY.value=offsets[selected].y;render()}
-$('#stocks').addEventListener('click',e=>{const b=e.target.closest('button[data-color]');if(!b)return;els.filmColor.value=b.dataset.color;document.querySelectorAll('#stocks button').forEach(x=>x.classList.toggle('selected',x===b));render()});$('#templates').addEventListener('click',e=>{const b=e.target.closest('button[data-t]');if(!b)return;type=b.dataset.t;selected=0;refresh()});$('#photos').addEventListener('click',e=>{const l=e.target.closest('label');if(l){selected=Number(l.querySelector('input').dataset.i);refreshSelection()}});function refreshSelection(){document.querySelectorAll('#photos .upload').forEach((e,i)=>e.classList.toggle('active',i===selected));els.zoom.value=Math.round(zooms[selected]*100);els.panX.value=offsets[selected].x;els.panY.value=offsets[selected].y;render()}
-function loadFile(file,cb){if(!file)return;const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{cb(img);URL.revokeObjectURL(url);render()};img.onerror=()=>{$('#status').textContent='Could not open that image. Try a JPEG or PNG.';URL.revokeObjectURL(url)};img.src=url}$('#photos').addEventListener('change',e=>{const inp=e.target;if(inp.type==='file'){const i=Number(inp.dataset.i);loadFile(inp.files[0],img=>{images[i]=img;offsets[i]={x:0,y:0};zooms[i]=1;selected=i;refresh()})}});$('#bgFile').addEventListener('change',e=>loadFile(e.target.files[0],img=>{background=img;backgroundMode='photo';$('#solid').classList.remove('selected');render()}));$('#solid').onclick=()=>{backgroundMode='solid';$('#solid').classList.add('selected');render()};Object.values(els).forEach(el=>el.addEventListener('input',()=>{if(el===els.zoom)zooms[selected]=Number(el.value)/100;if(el===els.panX)offsets[selected].x=Number(el.value);if(el===els.panY)offsets[selected].y=Number(el.value);if(el===els.filmColor)document.querySelectorAll('#stocks button').forEach(b=>b.classList.toggle('selected',b.dataset.color.toLowerCase()===el.value.toLowerCase()));render()}));
-function point(e){let r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}c.addEventListener('pointerdown',e=>{let p=point(e);for(let b of boxes){if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){selected=b.i;drag={p,orig:{...offsets[selected]}};c.setPointerCapture(e.pointerId);refreshSelection();break}}});c.addEventListener('pointermove',e=>{if(!drag)return;let p=point(e);offsets[selected]={x:drag.orig.x+p.x-drag.p.x,y:drag.orig.y+p.y-drag.p.y};els.panX.value=offsets[selected].x;els.panY.value=offsets[selected].y;render()});['pointerup','pointercancel'].forEach(ev=>c.addEventListener(ev,()=>drag=null));$('#export').onclick=()=>{window.__exporting=true;render();const a=document.createElement('a');a.download='film-frame-'+Date.now()+'.png';try{a.href=c.toDataURL('image/png');a.click();window.__exporting=false;render();$('#status').textContent='Image exported. If Safari opens it, long-press to save to Photos.'}catch(err){$('#status').textContent='Export failed. Try smaller photos or a different browser.'}};$('#reset').onclick=()=>{images=[null,null,null];offsets=[{x:0,y:0},{x:0,y:0},{x:0,y:0}];zooms=[1,1,1];background=null;backgroundMode='solid';type='triple';selected=0;els.scale.value=84;els.zoom.value=100;els.bgColor.value='#b9b8af';els.filmColor.value='#f6f3ec';els.fit.value='contain';els.markings.checked=true;els.panX.value=0;els.panY.value=0;document.querySelectorAll('#stocks button').forEach(b=>b.classList.toggle('selected',b.dataset.color==='#f6f3ec'));$('#solid').classList.add('selected');$('#status').textContent='Reset complete';refresh()};refresh();})();
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f3f1eb">
+<title>Film Frame Studio</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,'Helvetica Neue',sans-serif;color:#1c1c1c;background:#f3f1eb}
+*{box-sizing:border-box}
+body{margin:0;-webkit-text-size-adjust:100%}
+header{padding:19px 18px 11px;display:flex;align-items:center;justify-content:space-between}
+h1{font-size:21px;letter-spacing:-.7px;margin:0}
+small{color:#777}
+.app{max-width:1040px;margin:auto}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(290px,360px);gap:20px;padding:0 16px 24px}
+.stage{display:flex;flex-direction:column;gap:10px;align-self:start;position:sticky;top:8px}
+.preview{display:flex;align-items:center;justify-content:center;background:#dedbd4;border-radius:18px;padding:14px;min-height:400px}
+.preview canvas{display:block;width:auto;height:auto;max-width:100%;max-height:67vh;aspect-ratio:9/16;box-shadow:0 10px 35px #0002;background:#ddd;
+  touch-action:manipulation;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.panel{background:#fff;border-radius:18px;padding:17px;align-self:start}
+.group{border-bottom:1px solid #eee;padding-bottom:15px;margin-bottom:15px}
+.group:last-child{border:0;margin:0;padding:0}
+h2{font-size:12px;text-transform:uppercase;letter-spacing:1.3px;color:#777;margin:0 0 11px}
+h3{font-size:12px;color:#777;font-weight:500;margin:14px 0 8px}
+.templates{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+button,.upload{font:inherit;border:1px solid #d7d7d7;background:#fff;color:#242424;border-radius:10px;padding:10px 7px;cursor:pointer;text-align:center;font-size:12px;-webkit-tap-highlight-color:transparent}
+button.selected{border-color:#222;background:#222;color:#fff}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:8px;align-items:center;margin:10px 0}
+.row label{font-size:13px;flex:1}
+.row input[type=range]{flex:2;min-width:0}
+.row input[type=color]{height:34px;width:49px;border:0;background:none;padding:0}
+.row input[type=text],.row input[type=number]{flex:2;min-width:0;font:inherit;font-size:16px;padding:7px 9px;border:1px solid #d7d7d7;border-radius:9px}
+.row output{font-size:12px;color:#777;width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.photoGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.photoGrid .upload{min-height:54px;display:flex;justify-content:center;align-items:center;flex-direction:column;gap:3px}
+.upload input{display:none}
+.upload b{font-size:13px}
+.upload span{font-size:10px;color:#777}
+.upload.active{border:2px solid #222;background:#f4f2ec}
+.actions{display:flex;gap:8px}
+.primary{background:#1b1b1b;color:#fff;flex:1;font-weight:600;padding:13px}
+.secondary{flex:1}
+.hint{font-size:12px;color:#777;line-height:1.5;margin:9px 0 0}
+.toggle{display:flex;gap:6px}
+.toggle button{flex:1}
+.mode{display:flex;gap:4px;background:#fff;border-radius:12px;padding:4px}
+.mode button{flex:1;border:0;padding:9px 6px}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{display:flex;align-items:center;gap:7px;padding:8px 10px}
+.swatch i{width:16px;height:16px;border-radius:4px;display:block;box-shadow:inset 0 0 0 1px #0002}
+.swatch.selected i{box-shadow:inset 0 0 0 1px #fff6}
+.status{font-size:12px;color:#777;margin-top:8px;min-height:16px}
+[hidden]{display:none!important}
+@media(max-width:720px){
+  .layout{display:flex;flex-direction:column;gap:12px;padding:0 12px 24px}
+  .stage{position:static;align-self:stretch}
+  .preview{padding:12px;min-height:0}
+  .preview canvas{max-height:58vh}
+  .panel{width:100%}
+  header{padding:15px 15px 11px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<header><div><h1>FILM FRAME STUDIO</h1><small>Analog film layouts for your photographs</small></div><small>v2.0</small></header>
+<main class="layout">
+  <section class="stage">
+    <div class="preview"><canvas id="canvas" width="1080" height="1920" aria-label="Film layout preview"></canvas></div>
+    <div class="mode" id="mode">
+      <button data-mode="photo" class="selected">Adjust photo</button>
+      <button data-mode="film">Move film</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="group">
+      <h2>Film template</h2>
+      <div class="templates" id="templates"></div>
+      <div id="formatRow" hidden><h3>Film format</h3><div class="toggle" id="format">
+        <button data-format="35">35mm</button><button data-format="120">120 medium format</button></div></div>
+      <div id="orientRow" hidden><h3>Orientation</h3><div class="toggle" id="orient">
+        <button data-orient="portrait">Portrait</button><button data-orient="landscape">Landscape</button></div></div>
+    </div>
+
+    <div class="group">
+      <h2>Photographs</h2>
+      <div class="photoGrid" id="photos"></div>
+      <div class="row"><label for="zoom">Photo zoom</label><input id="zoom" type="range" min="100" max="600" value="100" step="1"><output id="zoomOut">100%</output></div>
+      <div class="toggle"><button id="fill">Fill frame</button><button id="fitWhole">Show whole</button><button id="center">Center</button></div>
+      <p class="hint">Tap a photo in the preview to select it. Then drag with one finger to position it and pinch to zoom. Touches outside the selected photo scroll the page.</p>
+    </div>
+
+    <div class="group">
+      <h2>Frame finish</h2>
+      <div class="swatches" id="finishes"></div>
+      <div class="row"><label for="filmColor">Custom color</label><input id="filmColor" type="color" value="#151413"></div>
+    </div>
+
+    <div class="group">
+      <h2>Layout</h2>
+      <div class="row"><label for="scale">Film size</label><input id="scale" type="range" min="45" max="125" value="100"><output id="scaleOut">100%</output></div>
+      <div class="toggle"><button id="centerFilm">Center film</button></div>
+      <p class="hint">Choose “Move film” under the preview to drag the whole film or pinch to resize it.</p>
+    </div>
+
+    <div class="group">
+      <h2>Markings</h2>
+      <div class="row"><label for="markings">Edge printing</label><input id="markings" type="checkbox" checked></div>
+      <div class="row" id="edgeTextRow"><label for="edgeText">Printed text</label><input id="edgeText" type="text" maxlength="28" autocomplete="off" autocapitalize="characters"></div>
+      <div class="row" id="frameNoRow"><label for="frameNo">First frame number</label><input id="frameNo" type="number" min="0" max="99" value="12" inputmode="numeric"></div>
+      <div class="row" id="captionRow" hidden><label for="caption">Handwritten caption</label><input id="caption" type="text" maxlength="40" autocomplete="off"></div>
+    </div>
+
+    <div class="group">
+      <h2>Background</h2>
+      <div class="toggle"><button id="solid" class="selected">Solid color</button><label class="upload" style="flex:1">Upload photo<input type="file" id="bgFile" accept="image/*"></label></div>
+      <div class="row"><label for="bgColor">Background color</label><input id="bgColor" type="color" value="#b9b8af"></div>
+      <div class="row"><label for="bgBlur">Background blur</label><input id="bgBlur" type="range" min="0" max="35" value="5"></div>
+    </div>
+
+    <div class="group">
+      <h2>Export</h2>
+      <div class="actions"><button class="primary" id="export">Save 1080 × 1920 PNG</button><button class="secondary" id="reset">Reset</button></div>
+      <p class="hint">Exports a clean image without the selection outline, rendered from your full-resolution photos. On iPhone the share sheet opens. Choose “Save Image” to add it to Photos.</p>
+      <div id="status" class="status" role="status"></div>
+    </div>
+  </section>
+</main>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ==========================================================================
+   Constants & state
+   ========================================================================== */
+const W = 1080, H = 1920;
+const MAX_ZOOM = 6;            // relative to "fill frame"
+const PREVIEW_MAX = 2048;      // long edge of the working copy used while editing
+const canvas = document.querySelector('#canvas');
+const ctx = canvas.getContext('2d');
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const TEMPLATES = [
+  {id: 'triple',   label: '3-frame strip',   count: 3, format: true},
+  {id: 'double',   label: '2-frame strip',   count: 2, format: true},
+  {id: 'single',   label: 'Single negative', count: 1, orient: true},
+  {id: 'slide',    label: 'Slide mount',     count: 1, orient: true},
+  {id: 'polaroid', label: 'Polaroid',        count: 1},
+];
+
+// Frame finishes. `ink` = edge print on film, `print` = printing on mounts.
+const FINISHES = {
+  black:  {label: 'Black',  base: '#151413', ink: '#d9a64c', print: '#b9b2a6'},
+  ivory:  {label: 'Ivory',  base: '#f1ebdd', ink: '#6a5d4a', print: '#6b6458'},
+  brown:  {label: 'Brown',  base: '#8a5a36', ink: '#f2cf9c', print: '#f0dcc0'},
+  walnut: {label: 'Walnut', base: '#553624', ink: '#e3c69c', print: '#e3cfae', grain: true},
+};
+
+const DEFAULT_TEXT = {film: '400 SAFETY FILM', slide: 'COLOR TRANSPARENCY'};
+
+const state = {
+  template: 'triple',
+  format: '35',            // strips: '35' | '120'
+  orient: 'portrait',      // single + slide
+  finish: 'black',
+  customColor: null,       // overrides finish base when set
+  selected: 0,
+  mode: 'photo',           // 'photo' | 'film'
+  photos: [null, null, null],
+  layout: {scale: 1, dx: 0, dy: 0},
+  background: null,
+  backgroundMode: 'solid',
+};
+
+let geom = null;           // last computed geometry (canvas px)
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+function hexToRgb(hex) {
+  const a = hex.replace('#', '');
+  return [0, 2, 4].map(i => parseInt(a.slice(i, i + 2), 16));
+}
+function luminance(hex) {
+  const [r, g, b] = hexToRgb(hex);
+  return .2126 * r + .7152 * g + .0722 * b;
+}
+function currentFinish() {
+  if (state.customColor) {
+    const dark = luminance(state.customColor) < 130;
+    return {base: state.customColor, ink: dark ? '#e2c08c' : '#4a4338', print: dark ? '#d8d2c6' : '#5d574c'};
+  }
+  return FINISHES[state.finish];
+}
+
+// Seeded random so the texture is identical in preview and export.
+function rng(seed) {
+  return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+}
+
+// Fine, low-contrast grain applied to all frame materials.
+const noisePattern = (() => {
+  const n = document.createElement('canvas'); n.width = n.height = 160;
+  const g = n.getContext('2d'), d = g.createImageData(160, 160), r = rng(7);
+  for (let i = 0; i < d.data.length; i += 4) {
+    const v = r() < .5 ? 0 : 255;
+    d.data[i] = d.data[i + 1] = d.data[i + 2] = v;
+    d.data[i + 3] = Math.floor(r() * 14);
+  }
+  g.putImageData(d, 0, 0);
+  return ctx.createPattern(n, 'repeat');
+})();
+
+// Subtle walnut grain: long, slightly wavering streaks along one axis.
+const grainCache = {};
+function grainPattern(vertical) {
+  const key = vertical ? 'v' : 'h';
+  if (grainCache[key]) return grainCache[key];
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'), r = rng(31);
+  for (let k = 0; k < 140; k++) {
+    const base = r() * S, amp = 2 + r() * 7, freq = (1 + Math.floor(r() * 3)) * Math.PI * 2 / S, ph = r() * 6.28;
+    g.strokeStyle = r() < .65 ? `rgba(20,10,4,${.05 + r() * .09})` : `rgba(255,225,190,${.03 + r() * .05})`;
+    g.lineWidth = .6 + r() * 2.2;
+    g.beginPath();
+    for (let t = 0; t <= S; t += 8) {
+      const off = base + Math.sin(t * freq + ph) * amp;
+      vertical ? (t ? g.lineTo(off, t) : g.moveTo(off, t)) : (t ? g.lineTo(t, off) : g.moveTo(t, off));
+    }
+    g.stroke();
+  }
+  return (grainCache[key] = ctx.createPattern(c, 'repeat'));
+}
+
+/* ==========================================================================
+   Film geometry — all dimensions in millimetres, from real formats
+   35mm (ISO 1007): film 35mm wide, image 24×36, frame pitch 38mm (8 perfs),
+     KS perforations 2.79 × 1.98mm at 4.75mm pitch, ~2mm from the film edge.
+   120: film 61.5mm wide, 6×4.5 image 56×41.5, 6×6 image 56×56.
+   Slide mount: 50×50mm, window 34×23mm.
+   Polaroid 600 / i-Type: 88×107mm, image 79×79mm.
+   ========================================================================== */
+function piece35(n) {
+  const w = 35, pitch = 38, iw = 24, ih = 36, end = 2;
+  const h = end * 2 + (n - 1) * pitch + ih;
+  const p = {w, h, kind: 'film', corner: .25, windows: [], holes: [], texts: [], bars: [], tris: [], grainVertical: true};
+  for (let i = 0; i < n; i++) p.windows.push({x: (w - iw) / 2, y: end + i * pitch, w: iw, h: ih, r: .3});
+  // Perforations run continuously along both edges, 8 per frame.
+  const pw = 1.98, ph = 2.79, pp = 4.75;
+  for (let y = end - 1 + (pp - ph) / 2; y + ph <= h - .4; y += pp) {
+    p.holes.push({x: 2.0, y, w: pw, h: ph, r: .5});
+    p.holes.push({x: w - 2.0 - pw, y, w: pw, h: ph, r: .5});
+  }
+  return p;
+}
+function mark35(p, start) {
+  const n = p.windows.length;
+  for (let i = 0; i < n; i++) {
+    const top = p.windows[i].y, num = start + i;
+    p.texts.push({x: 1.0, y: top + 18, a: 90, s: 1.3, t: 'EDGE', role: 'ink'});
+    p.texts.push({x: 34.0, y: top + 2.6, a: 90, s: 1.3, t: String(num), role: 'ink'});
+    p.texts.push({x: 34.0, y: top + 21.6, a: 90, s: 1.3, t: num + 'A', role: 'ink'});
+    p.tris.push({x: 34.0, y: top + 19.6, s: .9, a: 90});
+    // DX-style code segment
+    const r = rng(1000 + num);
+    let y = top + 6;
+    for (let k = 0; k < 18; k++) {
+      const bw = r() < .5 ? .28 : .5;
+      if (r() < .6) p.bars.push({x: 33.45, y, w: 1.1, h: bw});
+      y += bw + .22;
+    }
+  }
+}
+function piece120(n, fmt) {
+  const w = 61.5, iw = 56, ih = fmt === '66' ? 56 : 41.5, gap = fmt === '66' ? 4 : 4, end = 2.5;
+  const h = end * 2 + n * ih + (n - 1) * gap;
+  const p = {w, h, kind: 'film', corner: .3, windows: [], holes: [], texts: [], bars: [], tris: [], grainVertical: true};
+  for (let i = 0; i < n; i++) p.windows.push({x: (w - iw) / 2, y: end + i * (ih + gap), w: iw, h: ih, r: .6});
+  return p;
+}
+function mark120(p) {
+  p.windows.forEach(win => p.texts.push({x: 1.38, y: win.y + win.h / 2, a: 90, s: 1.45, t: 'EDGE', role: 'ink'}));
+}
+function pieceSlide() {
+  const p = {w: 50, h: 50, kind: 'mount', corner: 2.2, windows: [{x: 8, y: 13.5, w: 34, h: 23, r: .9}],
+             holes: [], texts: [], bars: [], tris: [], dots: [{x: 5.5, y: 44.5, r: .75}], grainVertical: false};
+  return p;
+}
+function markSlide(p, start) {
+  p.texts.push({x: 25, y: 7.6, a: 0, s: 2.2, t: 'EDGE', role: 'print', font: 'mount'});
+  p.texts.push({x: 25, y: 43.2, a: 0, s: 2.6, t: String(start), role: 'print', font: 'mount'});
+}
+function piecePolaroid() {
+  return {w: 88, h: 107, kind: 'polaroid', corner: .9, windows: [{x: 4.5, y: 6.5, w: 79, h: 79, r: .3}],
+          holes: [], texts: [], bars: [], tris: [], grainVertical: true};
+}
+
+// Rotate a piece 90° counter-clockwise (for landscape singles / portrait slides).
+function rotatePiece(p) {
+  const Wp = p.w;
+  const R = o => Object.assign({}, o, {x: o.y, y: Wp - o.x - (o.w || 0), w: o.h, h: o.w});
+  const P = o => Object.assign({}, o, {x: o.y, y: Wp - o.x, a: (o.a || 0) - 90});
+  return Object.assign({}, p, {
+    w: p.h, h: p.w, grainVertical: !p.grainVertical,
+    windows: p.windows.map(R), holes: p.holes.map(R), bars: p.bars.map(R),
+    texts: p.texts.map(P), tris: p.tris.map(P), dots: (p.dots || []).map(P),
+  });
+}
+
+function buildPiece() {
+  const t = state.template, marks = $('#markings').checked;
+  const start = clamp(parseInt($('#frameNo').value, 10) || 0, 0, 99);
+  let p;
+  if (t === 'triple' || t === 'double') {
+    const n = t === 'triple' ? 3 : 2;
+    if (state.format === '120') { p = piece120(n, n === 3 ? '645' : '66'); if (marks) mark120(p); }
+    else { p = piece35(n); if (marks) mark35(p, start); }
+  } else if (t === 'single') {
+    p = piece35(1); if (marks) mark35(p, start);
+    if (state.orient === 'landscape') p = rotatePiece(p);
+  } else if (t === 'slide') {
+    p = pieceSlide(); if (marks) markSlide(p, start);
+    if (state.orient === 'portrait') p = rotatePiece(p);
+  } else {
+    p = piecePolaroid();
+  }
+  return p;
+}
+
+// Convert the mm piece into canvas pixels, applying size + position.
+function computeGeometry() {
+  const p = buildPiece();
+  const fit = Math.min(W * .84 / p.w, H * .86 / p.h);
+  const k = fit * state.layout.scale;
+  const pw = p.w * k, ph = p.h * k;
+  const ox = W / 2 + state.layout.dx - pw / 2, oy = H / 2 + state.layout.dy - ph / 2;
+  const R = o => ({x: ox + o.x * k, y: oy + o.y * k, w: o.w * k, h: o.h * k, r: (o.r || 0) * k});
+  return {
+    piece: p, k, x: ox, y: oy, w: pw, h: ph,
+    windows: p.windows.map((o, i) => Object.assign(R(o), {i})),
+    holes: p.holes.map(R), bars: p.bars.map(R),
+    texts: p.texts.map(o => Object.assign({}, o, {x: ox + o.x * k, y: oy + o.y * k, s: o.s * k})),
+    tris: p.tris.map(o => Object.assign({}, o, {x: ox + o.x * k, y: oy + o.y * k, s: o.s * k})),
+    dots: (p.dots || []).map(o => ({x: ox + o.x * k, y: oy + o.y * k, r: o.r * k})),
+  };
+}
+
+/* ==========================================================================
+   Photo model
+   Each photo keeps: zoom (1 = exactly fills its window), and a focal point
+   (u, v) in 0–1 image coordinates that sits at the window's centre. This is
+   independent of film size and of image resolution, so preview and export
+   use identical math.
+   ========================================================================== */
+function photoView(ph, box) {
+  const cover = Math.max(box.w / ph.w, box.h / ph.h);
+  const contain = Math.min(box.w / ph.w, box.h / ph.h);
+  const minZ = contain / cover;
+  const z = clamp(ph.zoom, minZ, MAX_ZOOM);
+  const s = cover * z, dw = ph.w * s, dh = ph.h * s;
+  const u = dw > box.w + .01 ? clamp(ph.u, box.w / 2 / dw, 1 - box.w / 2 / dw) : .5;
+  const v = dh > box.h + .01 ? clamp(ph.v, box.h / 2 / dh, 1 - box.h / 2 / dh) : .5;
+  return {z, minZ, s, dw, dh, u, v, x: box.x + box.w / 2 - u * dw, y: box.y + box.h / 2 - v * dh};
+}
+// Write the clamped view back so state never drifts outside valid bounds.
+function normalizePhoto(i) {
+  const ph = state.photos[i], box = geom && geom.windows[i];
+  if (!ph || !box) return;
+  const v = photoView(ph, box);
+  ph.zoom = v.z; ph.u = v.u; ph.v = v.v;
+}
+
+/* ==========================================================================
+   Rendering
+   ========================================================================== */
+function windowPath(c, b) {
+  c.beginPath();
+  if (c.roundRect) c.roundRect(b.x, b.y, b.w, b.h, b.r || 0); else c.rect(b.x, b.y, b.w, b.h);
+}
+function piecePath(g) {
+  const path = new Path2D();
+  const r = g.piece.corner * g.k;
+  if (path.roundRect) path.roundRect(g.x, g.y, g.w, g.h, r); else path.rect(g.x, g.y, g.w, g.h);
+  g.holes.forEach(h => { if (path.roundRect) path.roundRect(h.x, h.y, h.w, h.h, h.r); else path.rect(h.x, h.y, h.w, h.h); });
+  return path;
+}
+
+const blurCache = {img: null, amount: -1, canvas: null};
+function drawBackground(c) {
+  c.fillStyle = $('#bgColor').value; c.fillRect(0, 0, W, H);
+  const bg = state.background;
+  if (!bg || state.backgroundMode !== 'photo') return;
+  const amount = Number($('#bgBlur').value);
+  // Blur by down- then up-sampling: works in every browser (Safari lacks ctx.filter on older iOS).
+  if (blurCache.img !== bg || blurCache.amount !== amount) {
+    const f = 1 + amount * .9;
+    const tc = document.createElement('canvas');
+    tc.width = Math.max(8, Math.round(W / f)); tc.height = Math.max(8, Math.round(H / f));
+    const t = tc.getContext('2d'); t.imageSmoothingQuality = 'high';
+    const s = Math.max(tc.width / bg.w, tc.height / bg.h);
+    t.drawImage(bg.preview, (tc.width - bg.w * s) / 2, (tc.height - bg.h * s) / 2, bg.w * s, bg.h * s);
+    Object.assign(blurCache, {img: bg, amount, canvas: tc});
+  }
+  c.save(); c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(blurCache.canvas, 0, 0, W, H);
+  c.fillStyle = '#00000018'; c.fillRect(0, 0, W, H);
+  c.restore();
+}
+
+function drawMaterial(c, g, fin) {
+  const path = piecePath(g), k = g.k;
+  // Base with a soft contact shadow; holes are true cut-outs.
+  c.save();
+  c.shadowColor = 'rgba(0,0,0,.30)'; c.shadowBlur = k * (g.piece.kind === 'film' ? 1.6 : 2.4); c.shadowOffsetY = k * .5;
+  c.fillStyle = fin.base; c.fill(path, 'evenodd');
+  c.restore();
+
+  c.save(); c.clip(path, 'evenodd');
+  // Gentle light falloff across the material.
+  const lg = c.createLinearGradient(g.x, g.y, g.x + g.w, g.y + g.h);
+  lg.addColorStop(0, 'rgba(255,255,255,.05)'); lg.addColorStop(1, 'rgba(0,0,0,.06)');
+  c.fillStyle = lg; c.fillRect(g.x, g.y, g.w, g.h);
+  if (fin.grain) { c.fillStyle = grainPattern(g.piece.grainVertical); c.fillRect(g.x, g.y, g.w, g.h); }
+  c.fillStyle = noisePattern; c.fillRect(g.x, g.y, g.w, g.h);
+  c.restore();
+
+  // Cut edges catch a hairline of shade on light finishes.
+  if (luminance(fin.base) > 150) {
+    c.save(); c.strokeStyle = 'rgba(0,0,0,.14)'; c.lineWidth = Math.max(1, k * .08); c.stroke(path); c.restore();
+  }
+}
+
+function drawPhoto(c, i, box, exporting) {
+  const ph = state.photos[i];
+  c.save(); windowPath(c, box); c.clip();
+  if (!ph) {
+    const lg = c.createLinearGradient(box.x, box.y, box.x, box.y + box.h);
+    lg.addColorStop(0, '#9aa3a3'); lg.addColorStop(1, '#6f7775');
+    c.fillStyle = lg; c.fillRect(box.x, box.y, box.w, box.h);
+    if (!exporting) {
+      c.fillStyle = 'rgba(255,255,255,.85)'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.font = `500 ${Math.round(Math.min(box.w, box.h) * .075)}px -apple-system,Helvetica,sans-serif`;
+      c.fillText('Tap to add photo', box.x + box.w / 2, box.y + box.h / 2);
+    }
+  } else {
+    const v = photoView(ph, box);
+    c.fillStyle = '#0d0d0d'; c.fillRect(box.x, box.y, box.w, box.h);
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.drawImage(exporting ? ph.src : ph.preview, v.x, v.y, v.dw, v.dh);
+  }
+  c.restore();
+}
+
+function drawWindowEdges(c, g, fin) {
+  const k = g.k, kind = g.piece.kind;
+  g.windows.forEach(b => {
+    if (kind === 'mount') {
+      // Embossed cardboard / plastic lip around the opening.
+      c.save(); windowPath(c, b); c.clip();
+      c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = k * .9;
+      c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = k * .6; windowPath(c, b); c.stroke();
+      c.restore();
+      c.save(); c.strokeStyle = luminance(fin.base) > 120 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.08)';
+      c.lineWidth = Math.max(1, k * .12);
+      const o = k * .9; windowPath(c, {x: b.x - o, y: b.y - o, w: b.w + 2 * o, h: b.h + 2 * o, r: b.r + o}); c.stroke(); c.restore();
+    } else if (kind === 'polaroid') {
+      c.save(); windowPath(c, b); c.clip();
+      c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = k * .6;
+      c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = k * .35; windowPath(c, b); c.stroke();
+      c.restore();
+    }
+  });
+}
+
+function edgeFont(sizePx, kind) {
+  return kind === 'mount'
+    ? `500 ${sizePx}px Futura,'Avenir Next','Century Gothic','Helvetica Neue',sans-serif`
+    : `700 ${sizePx}px 'DIN Condensed','Arial Narrow','Roboto Condensed','Helvetica Neue',sans-serif`;
+}
+
+function drawMarkings(c, g, fin) {
+  const kind = g.piece.kind;
+  const def = kind === 'mount' ? DEFAULT_TEXT.slide : DEFAULT_TEXT.film;
+  const edge = ($('#edgeText').value.trim() || def).toUpperCase();
+  c.save();
+  g.texts.forEach(t => {
+    const color = t.role === 'print' ? fin.print : fin.ink;
+    c.save(); c.translate(t.x, t.y); c.rotate(t.a * Math.PI / 180);
+    c.fillStyle = color; c.globalAlpha = .9;
+    c.font = edgeFont(t.s, t.font === 'mount' ? 'mount' : 'film');
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(t.t === 'EDGE' ? edge : t.t, 0, 0);
+    c.restore();
+  });
+  g.tris.forEach(t => {
+    c.save(); c.translate(t.x, t.y); c.rotate(t.a * Math.PI / 180);
+    c.fillStyle = fin.ink; c.globalAlpha = .9; c.beginPath();
+    c.moveTo(t.s * .5, 0); c.lineTo(-t.s * .5, -t.s * .45); c.lineTo(-t.s * .5, t.s * .45); c.closePath(); c.fill();
+    c.restore();
+  });
+  c.fillStyle = fin.ink; c.globalAlpha = .75;
+  g.bars.forEach(b => c.fillRect(b.x, b.y, b.w, b.h));
+  c.globalAlpha = .55; c.fillStyle = fin.print;
+  g.dots.forEach(d => { c.beginPath(); c.arc(d.x, d.y, d.r, 0, Math.PI * 2); c.fill(); });
+  c.restore();
+}
+
+function drawCaption(c, g) {
+  const text = $('#caption').value.trim();
+  if (g.piece.kind !== 'polaroid' || !text) return;
+  const k = g.k, win = g.windows[0];
+  c.save();
+  c.fillStyle = luminance(currentFinish().base) > 130 ? '#2b2a33' : '#f1ece2'; c.globalAlpha = .85; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.font = `${Math.round(k * 5.2)}px 'Bradley Hand','Marker Felt','Segoe Print','Comic Sans MS',cursive`;
+  c.fillText(text, g.x + g.w / 2, win.y + win.h + (g.y + g.h - win.y - win.h) / 2, g.w * .88);
+  c.restore();
+}
+
+function drawSelection(c, g) {
+  c.save();
+  if (state.mode === 'film') {
+    c.setLineDash([14, 10]); c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,.9)';
+    c.strokeRect(g.x - 10, g.y - 10, g.w + 20, g.h + 20);
+  } else {
+    const b = g.windows[state.selected];
+    if (b) {
+      c.lineWidth = 5; c.strokeStyle = 'rgba(0,0,0,.35)'; windowPath(c, {x: b.x - 6, y: b.y - 6, w: b.w + 12, h: b.h + 12, r: b.r + 6}); c.stroke();
+      c.lineWidth = 3; c.strokeStyle = '#fff'; c.stroke();
+    }
+  }
+  c.restore();
+}
+
+// Single render path used for both preview and export.
+function renderTo(c, exporting) {
+  const g = computeGeometry();
+  const fin = currentFinish();
+  c.clearRect(0, 0, W, H);
+  drawBackground(c);
+  drawMaterial(c, g, fin);
+  g.windows.forEach(b => drawPhoto(c, b.i, b, exporting));
+  drawWindowEdges(c, g, fin);
+  drawMarkings(c, g, fin);
+  drawCaption(c, g);
+  if (!exporting) drawSelection(c, g);
+  return g;
+}
+
+let raf = 0;
+function render() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; geom = renderTo(ctx, false); }); }
+function renderNow() { if (raf) { cancelAnimationFrame(raf); raf = 0; } geom = renderTo(ctx, false); }
+
+/* ==========================================================================
+   UI
+   ========================================================================== */
+function templateInfo() { return TEMPLATES.find(t => t.id === state.template); }
+
+function refreshPanel() {
+  const info = templateInfo();
+  if (state.selected >= info.count) state.selected = 0;
+  $('#templates').innerHTML = TEMPLATES.map(t => `<button data-t="${t.id}" class="${t.id === state.template ? 'selected' : ''}">${t.label}</button>`).join('');
+  $('#photos').innerHTML = Array.from({length: info.count}, (_, i) => `<label class="upload ${i === state.selected ? 'active' : ''}" data-i="${i}"><b>Frame ${i + 1}</b><span>${state.photos[i] ? 'Replace photo' : 'Choose photo'}</span><input type="file" accept="image/*" data-i="${i}"></label>`).join('');
+  $('#formatRow').hidden = !info.format;
+  $('#orientRow').hidden = !info.orient;
+  $$('#format button').forEach(b => b.classList.toggle('selected', b.dataset.format === state.format));
+  $$('#orient button').forEach(b => b.classList.toggle('selected', b.dataset.orient === state.orient));
+  $$('#mode button').forEach(b => b.classList.toggle('selected', b.dataset.mode === state.mode));
+  $$('#finishes button').forEach(b => b.classList.toggle('selected', !state.customColor && b.dataset.finish === state.finish));
+  const isPolaroid = state.template === 'polaroid';
+  $('#captionRow').hidden = !isPolaroid;
+  $('#edgeTextRow').hidden = isPolaroid;
+  $('#frameNoRow').hidden = isPolaroid || (info.format && state.format === '120');
+  const kind = state.template === 'slide' ? 'slide' : 'film';
+  $('#edgeText').placeholder = DEFAULT_TEXT[kind];
+  renderNow();
+  refreshZoomUI();
+}
+
+function refreshSelection() {
+  $$('#photos .upload').forEach((e, i) => e.classList.toggle('active', i === state.selected));
+  render();
+  refreshZoomUI();
+}
+
+function refreshZoomUI() {
+  const ph = state.photos[state.selected], box = geom && geom.windows[state.selected];
+  const zoom = $('#zoom');
+  const has = !!(ph && box);
+  [zoom, $('#fill'), $('#fitWhole'), $('#center')].forEach(el => el.disabled = !has);
+  if (!has) { $('#zoomOut').textContent = '—'; return; }
+  const v = photoView(ph, box);
+  zoom.min = Math.floor(v.minZ * 100); zoom.max = MAX_ZOOM * 100;
+  zoom.value = Math.round(v.z * 100);
+  $('#zoomOut').textContent = Math.round(v.z * 100) + '%';
+}
+
+$('#finishes').innerHTML = Object.entries(FINISHES).map(([id, f]) =>
+  `<button class="swatch" data-finish="${id}"><i style="background:${f.base}"></i>${f.label}</button>`).join('');
+
+$('#templates').addEventListener('click', e => {
+  const b = e.target.closest('button[data-t]'); if (!b) return;
+  state.template = b.dataset.t; state.selected = 0; refreshPanel();
+});
+$('#format').addEventListener('click', e => {
+  const b = e.target.closest('button[data-format]'); if (!b) return; state.format = b.dataset.format; refreshPanel();
+});
+$('#orient').addEventListener('click', e => {
+  const b = e.target.closest('button[data-orient]'); if (!b) return; state.orient = b.dataset.orient; refreshPanel();
+});
+$('#mode').addEventListener('click', e => {
+  const b = e.target.closest('button[data-mode]'); if (!b) return; state.mode = b.dataset.mode; refreshPanel();
+});
+$('#finishes').addEventListener('click', e => {
+  const b = e.target.closest('button[data-finish]'); if (!b) return;
+  state.finish = b.dataset.finish; state.customColor = null; $('#filmColor').value = FINISHES[state.finish].base; refreshPanel();
+});
+$('#filmColor').addEventListener('input', e => { state.customColor = e.target.value; refreshPanel(); });
+$('#photos').addEventListener('click', e => {
+  const l = e.target.closest('label[data-i]'); if (!l) return;
+  state.selected = Number(l.dataset.i); if (state.mode !== 'photo') { state.mode = 'photo'; refreshPanel(); } else refreshSelection();
+});
+$('#photos').addEventListener('change', e => {
+  const inp = e.target; if (inp.type !== 'file') return;
+  const i = Number(inp.dataset.i);
+  loadFile(inp.files[0], img => {
+    state.photos[i] = Object.assign(img, {zoom: 1, u: .5, v: .5});
+    state.selected = i; refreshPanel();
+  });
+  inp.value = '';
+});
+
+$('#zoom').addEventListener('input', e => {
+  const ph = state.photos[state.selected]; if (!ph) return;
+  ph.zoom = Number(e.target.value) / 100; normalizePhoto(state.selected);
+  $('#zoomOut').textContent = Math.round(ph.zoom * 100) + '%'; render();
+});
+$('#fill').onclick = () => { const ph = state.photos[state.selected]; if (!ph) return; ph.zoom = 1; normalizePhoto(state.selected); render(); refreshZoomUI(); };
+$('#fitWhole').onclick = () => { const ph = state.photos[state.selected]; if (!ph) return; ph.zoom = 0; ph.u = ph.v = .5; normalizePhoto(state.selected); render(); refreshZoomUI(); };
+$('#center').onclick = () => { const ph = state.photos[state.selected]; if (!ph) return; ph.u = ph.v = .5; normalizePhoto(state.selected); render(); };
+
+$('#scale').addEventListener('input', e => { state.layout.scale = Number(e.target.value) / 100; $('#scaleOut').textContent = e.target.value + '%'; render(); });
+$('#centerFilm').onclick = () => { state.layout.dx = state.layout.dy = 0; render(); };
+['#markings', '#edgeText', '#frameNo', '#caption', '#bgColor'].forEach(s => $(s).addEventListener('input', render));
+$('#markings').addEventListener('change', refreshPanel);
+$('#bgBlur').addEventListener('input', render);
+$('#bgFile').addEventListener('change', e => {
+  loadFile(e.target.files[0], img => { state.background = img; state.backgroundMode = 'photo'; $('#solid').classList.remove('selected'); render(); });
+  e.target.value = '';
+});
+$('#solid').onclick = () => { state.backgroundMode = 'solid'; $('#solid').classList.add('selected'); render(); };
+
+/* ==========================================================================
+   Image loading — originals are kept untouched for export; a working copy
+   (≤ 2048 px long edge) keeps live editing fast on iPhone.
+   ========================================================================== */
+function makePreview(img, w, h) {
+  if (Math.max(w, h) <= PREVIEW_MAX) return img;
+  let src = img, cw = w, ch = h;
+  const target = PREVIEW_MAX / Math.max(w, h);
+  // Halve in steps for a clean downscale, then finish at the exact size.
+  while (cw * .5 > w * target) {
+    const c = document.createElement('canvas'); c.width = Math.round(cw * .5); c.height = Math.round(ch * .5);
+    const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height);
+    src = c; cw = c.width; ch = c.height;
+  }
+  const c = document.createElement('canvas'); c.width = Math.round(w * target); c.height = Math.round(h * target);
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+
+function loadFile(file, cb) {
+  if (!file) return;
+  const url = URL.createObjectURL(file), img = new Image();
+  $('#status').textContent = 'Opening photo…';
+  img.onload = () => {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    cb({src: img, preview: makePreview(img, w, h), w, h});
+    $('#status').textContent = '';
+    // Keep the object URL alive: the original is redrawn at export time.
+  };
+  img.onerror = () => { $('#status').textContent = 'Could not open that image. Try a JPEG, HEIC or PNG.'; URL.revokeObjectURL(url); };
+  img.src = url;
+}
+
+function openPicker(i) {
+  const inp = $(`#photos input[data-i="${i}"]`);
+  if (inp) inp.click();
+}
+
+/* ==========================================================================
+   Direct manipulation
+   Touch: only a gesture that starts on the *selected* photo (or on the film
+   in “Move film” mode) is captured; everything else scrolls normally.
+   ========================================================================== */
+function toCanvas(clientX, clientY) {
+  const r = canvas.getBoundingClientRect();
+  return {x: (clientX - r.left) * W / r.width, y: (clientY - r.top) * H / r.height};
+}
+function hitWindow(p) {
+  if (!geom) return null;
+  return geom.windows.find(b => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) || null;
+}
+function hitPiece(p) {
+  return geom && p.x >= geom.x && p.x <= geom.x + geom.w && p.y >= geom.y && p.y <= geom.y + geom.h;
+}
+
+let gesture = null;   // active captured gesture
+let tap = null;       // candidate tap on a non-selected window
+
+function wantsCapture(p) {
+  if (state.mode === 'film') return hitPiece(p);
+  const b = hitWindow(p);
+  return !!(b && b.i === state.selected && state.photos[b.i]);
+}
+
+// (Re)start the gesture from the current set of points.
+function beginGesture(points) {
+  const pts = points.slice(0, 2);
+  const g = {pts};
+  if (pts.length === 2) {
+    g.mid = {x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2};
+    g.dist = Math.max(10, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+  }
+  if (state.mode === 'film') {
+    g.layout = Object.assign({}, state.layout);
+  } else {
+    normalizePhoto(state.selected);
+    const ph = state.photos[state.selected];
+    g.photo = {zoom: ph.zoom, u: ph.u, v: ph.v};
+  }
+  gesture = g;
+}
+
+function moveGesture(points) {
+  const g = gesture; if (!g) return;
+  const pts = points.slice(0, 2);
+  if (pts.length !== g.pts.length) { beginGesture(points); return; }
+  if (state.mode === 'film') {
+    const L = state.layout;
+    if (pts.length === 2) {
+      const mid = {x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2};
+      const dist = Math.max(10, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+      L.scale = clamp(g.layout.scale * dist / g.dist, .45, 1.25);
+      L.dx = g.layout.dx + mid.x - g.mid.x; L.dy = g.layout.dy + mid.y - g.mid.y;
+    } else {
+      L.dx = g.layout.dx + pts[0].x - g.pts[0].x; L.dy = g.layout.dy + pts[0].y - g.pts[0].y;
+    }
+    L.dx = clamp(L.dx, -W / 2, W / 2); L.dy = clamp(L.dy, -H / 2, H / 2);
+    $('#scale').value = Math.round(L.scale * 100); $('#scaleOut').textContent = Math.round(L.scale * 100) + '%';
+    render(); return;
+  }
+  const i = state.selected, ph = state.photos[i], box = geom.windows[i];
+  if (!ph || !box) return;
+  const cover = Math.max(box.w / ph.w, box.h / ph.h);
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+  const s0 = cover * g.photo.zoom;
+  if (pts.length === 2) {
+    const mid = {x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2};
+    const dist = Math.max(10, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+    ph.zoom = clamp(g.photo.zoom * dist / g.dist, 0, MAX_ZOOM);
+    const minZ = Math.min(box.w / ph.w, box.h / ph.h) / cover; ph.zoom = Math.max(ph.zoom, minZ);
+    const s = cover * ph.zoom;
+    // Keep the image point that was under the fingers' midpoint under it.
+    const pu = g.photo.u + (g.mid.x - cx) / (ph.w * s0), pv = g.photo.v + (g.mid.y - cy) / (ph.h * s0);
+    ph.u = pu - (mid.x - cx) / (ph.w * s); ph.v = pv - (mid.y - cy) / (ph.h * s);
+  } else {
+    ph.u = g.photo.u - (pts[0].x - g.pts[0].x) / (ph.w * s0);
+    ph.v = g.photo.v - (pts[0].y - g.pts[0].y) / (ph.h * s0);
+  }
+  normalizePhoto(i);
+  $('#zoom').value = Math.round(ph.zoom * 100); $('#zoomOut').textContent = Math.round(ph.zoom * 100) + '%';
+  render();
+}
+
+function endGesture() { gesture = null; refreshZoomUI(); }
+
+function handleTap(p) {
+  if (state.mode !== 'photo') return;
+  const b = hitWindow(p); if (!b) return;
+  if (b.i !== state.selected) { state.selected = b.i; refreshSelection(); }
+  if (!state.photos[b.i]) openPicker(b.i);
+}
+
+// ---- Touch (iPhone / iPad / Android) ----
+const touchPts = t => Array.from(t).map(x => toCanvas(x.clientX, x.clientY));
+canvas.addEventListener('touchstart', e => {
+  const pts = touchPts(e.touches);
+  if (gesture) { e.preventDefault(); beginGesture(pts); return; }
+  if (e.touches.length === 1 && wantsCapture(pts[0])) {
+    e.preventDefault(); tap = null; beginGesture(pts); return;
+  }
+  if (e.touches.length === 2 && state.mode === 'photo') {
+    // Pinch that began with one finger outside: capture if centred on the selected photo.
+    const mid = {x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2};
+    if (wantsCapture(mid)) { e.preventDefault(); tap = null; beginGesture(pts); return; }
+  }
+  tap = e.touches.length === 1 ? {p: pts[0], t: performance.now()} : null;
+}, {passive: false});
+
+canvas.addEventListener('touchmove', e => {
+  if (gesture) { e.preventDefault(); moveGesture(touchPts(e.touches)); return; }
+  if (tap) { const p = touchPts(e.touches)[0]; if (Math.hypot(p.x - tap.p.x, p.y - tap.p.y) > 24) tap = null; }
+}, {passive: false});
+
+function touchEnd(e) {
+  if (gesture) {
+    e.preventDefault();
+    if (e.touches.length) beginGesture(touchPts(e.touches)); else endGesture();
+    return;
+  }
+  if (tap && e.type === 'touchend' && performance.now() - tap.t < 500) {
+    e.preventDefault(); // suppress the synthetic click
+    handleTap(tap.p);
+  }
+  tap = null;
+}
+canvas.addEventListener('touchend', touchEnd, {passive: false});
+canvas.addEventListener('touchcancel', touchEnd, {passive: false});
+// Stop Safari's page-zoom gesture while we own a pinch.
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => { if (gesture) e.preventDefault(); }, {passive: false}));
+
+// ---- Mouse / pen (desktop) ----
+let mouse = null;
+canvas.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') return;
+  const p = toCanvas(e.clientX, e.clientY);
+  if (wantsCapture(p)) { mouse = true; canvas.setPointerCapture(e.pointerId); beginGesture([p]); }
+  else handleTap(p);
+});
+canvas.addEventListener('pointermove', e => { if (mouse && e.pointerType !== 'touch') moveGesture([toCanvas(e.clientX, e.clientY)]); });
+['pointerup', 'pointercancel'].forEach(t => canvas.addEventListener(t, e => { if (mouse && e.pointerType !== 'touch') { mouse = null; endGesture(); } }));
+canvas.addEventListener('wheel', e => {
+  const p = toCanvas(e.clientX, e.clientY);
+  if (!wantsCapture(p)) return;
+  e.preventDefault();
+  const f = Math.exp(-e.deltaY * .0015);
+  // Express a wheel step as a tiny two-finger pinch around the cursor.
+  beginGesture([{x: p.x - 50, y: p.y}, {x: p.x + 50, y: p.y}]);
+  moveGesture([{x: p.x - 50 * f, y: p.y}, {x: p.x + 50 * f, y: p.y}]);
+  endGesture();
+}, {passive: false});
+
+/* ==========================================================================
+   Export — same renderer, full-resolution sources, no UI overlay
+   ========================================================================== */
+function dataURLToBlob(url) {
+  const [head, b64] = url.split(','), bin = atob(b64), arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], {type: head.match(/:(.*?);/)[1]});
+}
+
+$('#export').onclick = async () => {
+  const status = $('#status');
+  try {
+    renderNow();
+    const out = document.createElement('canvas'); out.width = W; out.height = H;
+    renderTo(out.getContext('2d'), true);
+    // Synchronous encode keeps Safari's user-gesture for the share sheet.
+    const blob = dataURLToBlob(out.toDataURL('image/png'));
+    const name = 'film-frame-' + Date.now() + '.png';
+    const file = new File([blob], name, {type: 'image/png'});
+    const touchDevice = matchMedia('(pointer: coarse)').matches;
+    if (touchDevice && navigator.canShare && navigator.canShare({files: [file]})) {
+      try { await navigator.share({files: [file]}); status.textContent = 'Shared. Choose “Save Image” to keep it in Photos.'; return; }
+      catch (err) { if (err && err.name === 'AbortError') { status.textContent = ''; return; } }
+    }
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    status.textContent = 'Image exported (1080 × 1920 PNG).';
+  } catch (err) {
+    status.textContent = 'Export failed. Try smaller photos or a different browser.';
+  }
+};
+
+$('#reset').onclick = () => {
+  Object.assign(state, {template: 'triple', format: '35', orient: 'portrait', finish: 'black', customColor: null, selected: 0, mode: 'photo',
+    photos: [null, null, null], layout: {scale: 1, dx: 0, dy: 0}, background: null, backgroundMode: 'solid'});
+  $('#scale').value = 100; $('#scaleOut').textContent = '100%';
+  $('#bgColor').value = '#b9b8af'; $('#bgBlur').value = 5; $('#filmColor').value = FINISHES.black.base;
+  $('#markings').checked = true; $('#edgeText').value = ''; $('#frameNo').value = 12; $('#caption').value = '';
+  $('#solid').classList.add('selected');
+  $('#status').textContent = 'Reset complete';
+  refreshPanel();
+};
+
+// Test hook (no effect on the app): lets automated tests inspect state.
+window.__ffs = {state, get geom() { return geom; }, renderNow, photoView};
+
+refreshPanel();
+})();
+</script>
+</body>
+</html>
